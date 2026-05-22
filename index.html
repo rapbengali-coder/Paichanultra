@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PaichaN+ Ultimate v11 | Production Version</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;900&display=swap" rel="stylesheet">
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        body { font-family: 'Outfit', sans-serif; background: #000814; color: #fff; margin:0; -webkit-tap-highlight-color: transparent; }
+        .gold-grad { background: linear-gradient(135deg, #c5a059 0%, #f1d38e 50%, #c5a059 100%); color: #000; }
+        .luxury-card { background: rgba(255, 255, 255, 0.02); backdrop-filter: blur(20px); border: 1px solid rgba(197, 160, 89, 0.15); border-radius: 1.5rem; }
+        .input-luxury { background: rgba(255,255,255,0.03); border: 1px solid rgba(197, 160, 89, 0.2); padding: 16px; border-radius: 14px; outline: none; width: 100%; color: white; font-size: 13px; margin-bottom: 12px; transition: 0.3s; }
+        .input-luxury:focus { border-color: #c5a059; background: rgba(255,255,255,0.06); }
+        .btn-main { padding: 18px; border-radius: 16px; font-weight: 900; text-transform: uppercase; font-size: 11px; width: 100%; cursor: pointer; border:none; transition: 0.3s; letter-spacing: 2px; }
+        .nav-fixed { position: fixed; bottom: 0; width: 100%; background: rgba(0,8,20,0.95); backdrop-filter: blur(20px); border-top: 1px solid rgba(197,160,89,0.1); display: flex; justify-content: space-around; padding: 20px; z-index: 1000; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, addDoc, onSnapshot, query, where, increment, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyC8xyH5J923wDob7R4icRpAp3SCbeaXx70",
+            authDomain: "earncash-2b12f.firebaseapp.com",
+            projectId: "earncash-2b12f",
+            storageBucket: "earncash-2b12f.firebasestorage.app",
+            messagingSenderId: "829794818209",
+            appId: "1:829794818209:web:60df663d39c69eadf2f8e0"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        window.auth = getAuth(app); window.db = getFirestore(app);
+        window.api = { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut, onAuthStateChanged, doc, setDoc, getDoc, updateDoc, collection, addDoc, onSnapshot, query, where, increment, getDocs };
+    </script>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        const App = () => {
+            const [view, setView] = useState('loading');
+            const [activeTab, setActiveTab] = useState('home');
+            const [user, setUser] = useState(null);
+            const [products, setProducts] = useState([]);
+            const [orders, setOrders] = useState([]);
+            const [selectedProd, setSelectedProd] = useState(null);
+            const [discount, setDiscount] = useState(0);
+            
+            // নতুন ইন্টারঅ্যাক্টিভ উইন্ডো স্টেটসমূহ
+            const [authSubView, setAuthSubView] = useState('login'); // login, signup, forget, seller_reg
+
+            useEffect(() => {
+                const unsub = window.api.onAuthStateChanged(window.auth, async (u) => {
+                    if (u) {
+                        const snap = await window.api.getDoc(window.api.doc(window.db, "users", u.uid));
+                        if(snap.exists()) {
+                            setUser({...snap.data(), uid: u.uid});
+                            syncData(snap.data(), u.uid);
+                        } else {
+                            // নতুন ইউজারের ক্ষেত্রে ফায়ারস্টোরে ডিফল্ট ডাটা তৈরি করবে
+                            const defaultData = { email: u.email, role: 'customer', wallet: 0 };
+                            await window.api.setDoc(window.api.doc(window.db, "users", u.uid), defaultData);
+                            setUser({...defaultData, uid: u.uid});
+                            syncData(defaultData, u.uid);
+                        }
+                    } else { setView('login'); }
+                });
+                return () => unsub();
+            }, []);
+
+            const syncData = (uData, uid) => {
+                window.api.onSnapshot(window.api.collection(window.db, "products"), s => setProducts(s.docs.map(d=>({id:d.id, ...d.data()}))));
+                let q = uData.role === 'customer' ? window.api.query(window.api.collection(window.db, "orders"), window.api.where("userId", "==", uid)) : window.api.collection(window.db, "orders");
+                window.api.onSnapshot(q, s => setOrders(s.docs.map(d=>({id:d.id, ...d.data()}))));
+                setView('main');
+            };
+
+            const handleLogin = (e, p) => {
+                window.api.signInWithEmailAndPassword(window.auth, e, p).catch(err => alert("Error: " + err.message));
+            };
+
+            const handleSignup = (e, p) => {
+                window.api.createUserWithEmailAndPassword(window.auth, e, p)
+                    .then(() => alert("Account Created Successfully!"))
+                    .catch(err => alert("Signup Failed: " + err.message));
+            };
+
+            const handleForgetPassword = (e) => {
+                window.api.sendPasswordResetEmail(window.auth, e)
+                    .then(() => { alert("Password Reset Link Sent to your Email!"); setAuthSubView('login'); })
+                    .catch(err => alert("Error: " + err.message));
+            };
+
+            const handleSellerReg = async (brand, name, email, phone) => {
+                if(!brand || !name || !email || !phone) return alert("Please fill all fields!");
+                await window.api.addDoc(window.api.collection(window.db, "seller_applications"), {
+                    brandName: brand, ownerName: name, email, phone, status: "Pending", createdAt: new Date()
+                });
+                alert("Application Submitted! Admin will review and activate your seller profile soon.");
+                setAuthSubView('login');
+            };
+
+            if(view === 'loading') return <div className="h-screen flex items-center justify-center bg-[#000814] text-[#c5a059] font-black italic tracking-tighter text-2xl animate-pulse">PAICHAN+</div>;
+
+            return (
+                <div className="max-w-md mx-auto min-h-screen bg-[#000814] pb-28 relative">
+                    
+                    {/* AUTHENTICATION ROUTER */}
+                    {view === 'login' && (
+                        <div className="p-10 pt-28 space-y-4 text-center min-h-screen flex flex-col justify-center">
+                            <h1 className="text-5xl font-black italic mb-10 tracking-tighter">PAICHAN<span className="text-[#c5a059]">+</span></h1>
+                            
+                            {/* 1. LOGIN FORM */}
+                            {authSubView === 'login' && (
+                                <div className="space-y-3 w-full animate-in fade-in duration-300">
+                                    <input className="input-luxury" placeholder="EMAIL ID" id="le" />
+                                    <input className="input-luxury" type="password" placeholder="PASSWORD" id="lp" />
+                                    <button onClick={()=>handleLogin(document.getElementById('le').value, document.getElementById('lp').value)} className="gold-grad btn-main w-full shadow-2xl shadow-yellow-900/20 mt-2">LOGIN</button>
+                                    
+                                    <div className="pt-6 space-y-6">
+                                        <div className="flex justify-between text-[10px] font-black uppercase tracking-widest opacity-50 px-2">
+                                            <button onClick={()=>setAuthSubView('signup')} className="hover:text-[#c5a059]">Create Account</button>
+                                            <button onClick={()=>setAuthSubView('forget')} className="hover:text-[#c5a059]">Forget Password?</button>
+                                        </div>
+                                        <div className="border-t border-white/5 pt-6">
+                                            <button onClick={()=>setAuthSubView('seller_reg')} className="w-full py-4 rounded-2xl border border-[#c5a059]/30 text-[#c5a059] text-[10px] font-black uppercase tracking-[3px] hover:bg-[#c5a059]/5">Become a PaichaN Seller</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* 2. SIGNUP FORM */}
+                            {authSubView === 'signup' && (
+                                <div className="space-y-3 w-full text-left animate-in slide-in-from-right duration-300">
+                                    <p className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 text-center">New Account Registration</p>
+                                    <input className="input-luxury" placeholder="YOUR EMAIL" id="se" />
+                                    <input className="input-luxury" type="password" placeholder="CREATE PASSWORD" id="sp" />
+                                    <button onClick={()=>handleSignup(document.getElementById('se').value, document.getElementById('sp').value)} className="gold-grad btn-main w-full mt-2">SIGN UP</button>
+                                    <button onClick={()=>setAuthSubView('login')} className="w-full text-[10px] text-center opacity-40 font-bold uppercase tracking-widest mt-4">← Back to Login</button>
+                                </div>
+                            )}
+
+                            {/* 3. FORGET PASSWORD FORM */}
+                            {authSubView === 'forget' && (
+                                <div className="space-y-3 w-full text-left animate-in slide-in-from-right duration-300">
+                                    <p className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 text-center">Reset Account Password</p>
+                                    <input className="input-luxury" placeholder="ENTER REGISTERED EMAIL" id="fe" />
+                                    <button onClick={()=>handleForgetPassword(document.getElementById('fe').value)} className="gold-grad btn-main w-full mt-2">SEND RESET LINK</button>
+                                    <button onClick={()=>setAuthSubView('login')} className="w-full text-[10px] text-center opacity-40 font-bold uppercase tracking-widest mt-4">← Back to Login</button>
+                                </div>
+                            )}
+
+                            {/* 4. BECOME A SELLER APPLICATION FORM */}
+                            {authSubView === 'seller_reg' && (
+                                <div className="space-y-3 w-full text-left animate-in slide-in-from-bottom duration-400">
+                                    <p className="text-[10px] font-black text-[#c5a059] uppercase tracking-widest mb-4 text-center">Seller Onboarding Studio</p>
+                                    <input className="input-luxury" placeholder="BRAND NAME / SHOP NAME" id="s_brand" />
+                                    <input className="input-luxury" placeholder="OWNER FULL NAME" id="s_name" />
+                                    <input className="input-luxury" placeholder="BUSINESS EMAIL ID" id="s_email" />
+                                    <input className="input-luxury" placeholder="CONTACT PHONE NUMBER" id="s_phone" />
+                                    <button onClick={()=>handleSellerReg(
+                                        document.getElementById('s_brand').value,
+                                        document.getElementById('s_name').value,
+                                        document.getElementById('s_email').value,
+                                        document.getElementById('s_phone').value
+                                    )} className="gold-grad btn-main w-full mt-2">SUBMIT APPLICATION</button>
+                                    <button onClick={()=>setAuthSubView('login')} className="w-full text-[10px] text-center opacity-40 font-bold uppercase tracking-widest mt-4">← Cancel & Back</button>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {view === 'main' && (
+                        <>
+                            {activeTab === 'home' && (
+                                <div className="p-6 space-y-6">
+                                    <div className="flex justify-between items-center"><h2 className="text-2xl font-black italic">EXPLORE</h2><p className="text-xs font-black text-[#c5a059]">₹{user.wallet || 0}</p></div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        {products.map(p => (
+                                            <div key={p.id} className="luxury-card overflow-hidden" onClick={()=>setSelectedProd(p)}>
+                                                <img src={p.img} className="h-48 w-full object-cover" />
+                                                <div className="p-4"><p className="text-xs font-black text-[#c5a059]">₹{p.price}</p><h4 className="text-[10px] opacity-40 uppercase truncate font-bold">{p.name}</h4></div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {activeTab === 'account' && (
+                                <div className="p-6 space-y-3">
+                                    <h2 className="text-xl font-black mb-6 italic uppercase">My Profile</h2>
+                                    <div className="luxury-card p-5 flex items-center gap-4 mb-4"><div className="h-12 w-12 rounded-full gold-grad flex items-center justify-center font-black">P</div><div><p className="text-xs font-black">{user.email}</p><p className="text-[10px] opacity-40 uppercase">Role: {user.role}</p></div></div>
+                                    {[
+                                        {l: "Order History", i: "📦"}, {l: "Wallet Transactions", i: "💰"},
+                                        {l: "7-Days Return Policy", i: "🔄"}, {l: "Help: 7602844824", i: "📞", c: "#c5a059"},
+                                        {l: "WhatsApp Support", i: "💬", c: "#25D366"}
+                                    ].map((m, i) => (
+                                        <div key={i} className="luxury-card p-4 flex justify-between items-center active:scale-95 transition-all"><div className="flex items-center gap-4"><span>{m.i}</span><span className="text-[11px] font-black uppercase" style={{color: m.c}}>{m.l}</span></div><span className="opacity-20 text-xs">❯</span></div>
+                                    ))}
+                                    <button onClick={()=>window.api.signOut(window.auth)} className="w-full mt-10 text-[10px] text-red-500 font-black opacity-30 uppercase tracking-widest">Logout</button>
+                                </div>
+                            )}
+
+                            {activeTab === 'panel' && (
+                                <div className="p-6 space-y-6">
+                                    <h2 className="text-xl font-black text-[#c5a059] italic uppercase">{user.role} PANEL</h2>
+                                    {user.role === 'admin' && (
+                                        <div className="luxury-card p-5 space-y-4">
+                                            <p className="text-[10px] font-black opacity-50 uppercase">Admin Coupon Manager</p>
+                                            <input className="input-luxury" placeholder="Coupon Code (e.g., NEW100)" id="c_code" />
+                                            <input className="input-luxury" placeholder="Discount Amount (₹)" id="c_amt" />
+                                            <button onClick={async ()=>{
+                                                const code = document.getElementById('c_code').value;
+                                                const amt = Number(document.getElementById('c_amt').value);
+                                                await window.api.addDoc(window.api.collection(window.db, "coupons"), {code: code.toUpperCase(), amount: amt, active: true});
+                                                alert("Coupon Saved Globally!");
+                                            }} className="gold-grad btn-main text-[10px]">Deploy Coupon</button>
+                                        </div>
+                                    )}
+                                    <div className="luxury-card p-5">
+                                        <p className="text-[10px] font-black opacity-50 mb-4 uppercase">System Order Logs ({orders.length})</p>
+                                        {orders.map(o => (
+                                            <div key={o.id} className="border-b border-white/5 py-3 flex justify-between items-center text-[11px] font-bold">
+                                                <span>{o.prodName}</span><span className="text-[#c5a059]">₹{o.price}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            <nav className="nav-fixed">
+                                <button onClick={()=>setActiveTab('home')} className={`text-[10px] font-black ${activeTab==='home'?'text-[#c5a059]':'opacity-20'}`}>HOME</button>
+                                {user.role !== 'customer' && <button onClick={()=>setActiveTab('panel')} className={`text-[10px] font-black ${activeTab==='panel'?'text-[#c5a059]':'opacity-20'}`}>PANEL</button>}
+                                <button onClick={()=>setActiveTab('account')} className={`text-[10px] font-black ${activeTab==='account'?'text-[#c5a059]':'opacity-20'}`}>ACCOUNT</button>
+                            </nav>
+                        </>
+                    )}
+
+                    {/* PRODUCT DETAIL VIEW */}
+                    {selectedProd && (
+                        <div className="fixed inset-0 z-[5000] bg-[#000814] overflow-y-auto p-6 animate-in fade-in duration-500">
+                            <button onClick={()=>setSelectedProd(null)} className="text-[#c5a059] font-black text-xs mb-8 tracking-widest">← BACK</button>
+                            <img src={selectedProd.img} className="w-full h-96 object-cover rounded-[3rem] shadow-2xl mb-8" />
+                            <h2 className="text-3xl font-black uppercase tracking-tighter leading-none">{selectedProd.name}</h2>
+                            <div className="flex items-center gap-3 mt-2 mb-8">
+                                <span className="text-2xl font-black text-[#c5a059]">₹{selectedProd.price}</span>
+                                <span className="text-sm opacity-20 line-through font-bold">MRP ₹{selectedProd.mrp}</span>
+                            </div>
+
+         
